@@ -186,7 +186,7 @@ function gossipAlgorithm(notAvailableNodes = {}, offset = 3) {
     }
     while (count < offset || curIndex !== indexPort);
 
-    for (let gossipPort of gossipList) {
+    for (let gossipPort of localPorts) {
 
         let peer = {
             port: gossipPort,
