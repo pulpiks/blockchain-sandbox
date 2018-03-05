@@ -69,7 +69,7 @@ socketListener.on('request', (request, peer) => {
                 console.log('received member list', receivedMemberList);
                 break;
             }
-            case 'gossipPeers':
+            case 'message':
             {
                 const { notAvailablePorts } = jsonRequest;
 
@@ -161,7 +161,7 @@ else {
 // 3 -> 4 1
 // 4 -> 1 2
 
-function gossipAlgorithm(notAvailableNodes = {}, offset = 3) {
+function gossipAlgorithm(notAvailableNodes, offset = 3) {
     const processPort = port;
     let ports = Object.keys(receivedMemberList);
 
