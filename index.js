@@ -199,7 +199,8 @@ function findAvailablePorts(prevPort) {
         if (prevPorts.findIndex((el) => el === port)) {
             return resPorts;
         }
-        return resPorts.push(port);
+        resPorts.push(port);
+        return resPorts;
     }, []);
     return resultPorts;
 }
