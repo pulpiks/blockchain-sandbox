@@ -36,10 +36,10 @@ const bufFormat = (json) => (new Buffer(JSON.stringify(json)));
 let receivedMemberList = {};
 
 socketListener.on('request', (request, peer) => {
-    console.log('request', request, peer);
+    // console.log('request', request, peer);
     const requestStr = request.toString();
     const jsonRequest = JSON.parse(requestStr);
-    console.log('json request', jsonRequest);
+    // console.log('json request', jsonRequest);
     if (isRoot) {
         const {
             cmd,
@@ -66,14 +66,14 @@ socketListener.on('request', (request, peer) => {
             case 'list':
             {
                 receivedMemberList = jsonRequest.ports;
-                console.log('received member list', receivedMemberList);
+                // console.log('received member list', receivedMemberList);
                 break;
             }
             case 'message':
             {
-                const { notAvailablePorts } = jsonRequest;
-
-                gossipAlgorithm(notAvailablePorts);
+                console.log('gossip triggers port');
+                console.log('notAvailablePorts = ', port);
+                sendMessageOtherPeers(port);
 
                 break;
             }
@@ -100,7 +100,7 @@ if (!isRoot) {
             }),
             rootPeer,
             (error, response, peer) => {
-                console.log('root request add', response && response.toString());
+                // console.log('root request add', response && response.toString());
             }
         );
         rootConnection.request(
@@ -109,7 +109,7 @@ if (!isRoot) {
             }),
             rootPeer,
             (e, r) => {
-                const jsonResponse = JSON.parse(r.toString());
+                // const jsonResponse = JSON.parse(r.toString());
                 if (jsonResponse.cmd === 'list')
                     receivedMemberList = jsonResponse.ports;
             }
@@ -118,7 +118,7 @@ if (!isRoot) {
 
 
     setInterval(() => {
-        console.log('member list', receivedMemberList);
+        // console.log('member list', receivedMemberList);
     }, 1000 * 1.5);
 
 }
@@ -138,10 +138,12 @@ else {
                 host: 'localhost'
             };
 
+            console.log('port which triggers gossip');
+
             socketListener.request(
                 bufFormat({
                     cmd: 'message',
-                    notAvailablePorts: {}
+                    port: rootPort
                 }),
                 peer,
                 (error, response, peer) => {
@@ -161,7 +163,72 @@ else {
 // 3 -> 4 1
 // 4 -> 1 2
 
-function gossipAlgorithm(notAvailableNodes, offset = 3) {
+
+
+// 1 2 3 4
+// 1 - 2 3 4
+// 2 - 1 3 4 (in real life if empty ports)
+// 3 - 1 2 4 (empty)
+// 4 - 1 2 3 (empty)
+
+function calculatePeers(port, offset = 3) {
+
+    if (port === rootPort) {
+        return [];
+    }
+
+    let ports = Object.keys(receivedMemberList);
+    if (offset >= ports.length) {
+        offset = ports.length - 1;
+    }
+    let index = ports.indexOf(port);
+    let rightList = ports.slice(index + 1, offset);
+    let leftList = [];
+    if (rightList.length < offset) {
+        let diff = offset - rightList.length;
+        leftList.push(ports.slice(index - diff, diff));
+    }
+    return [].concat(leftList, rightList);
+}
+
+
+function findAvailablePorts(prevPort) {
+    let prevPorts = calculatePeers(prevPort).join(prevPort);
+    let curPorts = calculatePeers(port);
+    let resultPorts = curPorts.reduce((resPorts, port) => {
+        if (prevPorts.findIndex((el) => el === port)) {
+            return resPorts;
+        }
+        return resPorts.push(port);
+    }, []);
+    return resultPorts;
+}
+
+
+function sendMessageOtherPeers(prevPort) {
+    const ports = findAvailablePorts(prevPort);
+
+    for (let gossipPort of ports) {
+        let peer = {
+            port: gossipPort,
+            host: 'localhost'
+        };
+
+        socketListener.request(
+            bufFormat({
+                cmd: 'message',
+                prevPort: port // send curPort to the next peers
+            }),
+            peer,
+            (error, response, peer) => {
+                console.log('send message from peer = ', response && response.toString());
+            }
+        );
+    }
+}
+
+
+function gossipAlgorithm(prevPort, offset = 3) {
     const processPort = port;
     let ports = Object.keys(receivedMemberList);
 
@@ -169,6 +236,7 @@ function gossipAlgorithm(notAvailableNodes, offset = 3) {
     let curIndex = indexPort + 1;
     let count = 0;
     let localPorts = [];
+
     do {
         if (curIndex > ports.length - 1) {
             curIndex = 0;
@@ -186,6 +254,8 @@ function gossipAlgorithm(notAvailableNodes, offset = 3) {
     }
     while (count < offset || curIndex !== indexPort);
 
+    console.log('localPorts = ', localPorts);
+
     for (let gossipPort of localPorts) {
 
         let peer = {
@@ -196,12 +266,11 @@ function gossipAlgorithm(notAvailableNodes, offset = 3) {
         socketListener.request(
             bufFormat({
                 cmd: 'message',
-                port,
                 notAvailablePorts: notAvailableNodes
             }),
             peer,
             (error, response, peer) => {
-                console.log('root request add', response && response.toString());
+                console.log('send message from peer = ', response && response.toString());
             }
         );
     }
